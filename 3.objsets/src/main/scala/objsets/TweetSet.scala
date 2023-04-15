@@ -36,11 +36,15 @@ abstract class TweetSet extends TweetSetInterface:
   /**
    * This method takes a predicate and returns a subset of all the elements
    * in the original set for which the predicate is true.
+   * Returns a TweetSet, which could be an Empty or NonEmpty TweetSet
    *
    * Question: Can we implement this method here, or should it remain abstract
    * and be implemented in the subclasses?
    */
-  def filter(p: Tweet => Boolean): TweetSet = ???
+
+  def isEmpty: Boolean
+
+  def filter(p: Tweet => Boolean): TweetSet = filterAcc(p, new Empty)
 
   /**
    * This is a helper method for `filter` that propagates the accumulated tweets.
@@ -53,7 +57,7 @@ abstract class TweetSet extends TweetSetInterface:
    * Question: Should we implement this method here, or should it remain abstract
    * and be implemented in the subclasses?
    */
-  def union(that: TweetSet): TweetSet = ???
+  def union(that: TweetSet): TweetSet
 
   /**
    * Returns the tweet from this set which has the greatest retweet count.
@@ -64,7 +68,7 @@ abstract class TweetSet extends TweetSetInterface:
    * Question: Should we implement this method here, or should it remain abstract
    * and be implemented in the subclasses?
    */
-  def mostRetweeted: Tweet = ???
+  def mostRetweeted: Tweet
 
   /**
    * Returns a list containing all tweets of this set, sorted by retweet count
@@ -75,7 +79,7 @@ abstract class TweetSet extends TweetSetInterface:
    * Question: Should we implement this method here, or should it remain abstract
    * and be implemented in the subclasses?
    */
-  def descendingByRetweet: TweetList = ???
+  def descendingByRetweet: TweetList
 
   /**
    * The following methods are already implemented
@@ -105,7 +109,15 @@ abstract class TweetSet extends TweetSetInterface:
   def foreach(f: Tweet => Unit): Unit
 
 class Empty extends TweetSet:
-  def filterAcc(p: Tweet => Boolean, acc: TweetSet): TweetSet = ???
+  def isEmpty: Boolean = true
+
+  def filterAcc(p: Tweet => Boolean, acc: TweetSet): TweetSet = acc
+
+  def union(that: TweetSet): TweetSet = that
+
+  def mostRetweeted: Tweet = throw new java.util.NoSuchElementException("empty TweetSet")
+
+  def descendingByRetweet: TweetList = Nil
 
   /**
    * The following methods are already implemented
@@ -120,8 +132,24 @@ class Empty extends TweetSet:
   def foreach(f: Tweet => Unit): Unit = ()
 
 class NonEmpty(elem: Tweet, left: TweetSet, right: TweetSet) extends TweetSet:
+  def isEmpty: Boolean = false
 
-  def filterAcc(p: Tweet => Boolean, acc: TweetSet): TweetSet = ???
+  def filterAcc(p: Tweet => Boolean, acc: TweetSet): TweetSet = 
+    if (p(elem)) then right.filterAcc(p, left.filterAcc(p, acc.incl(elem)))
+    else right.filterAcc(p, left.filterAcc(p, acc))
+  
+  def union(that: TweetSet): TweetSet = left.union(right).union(that).incl(elem)
+    
+  def mostRetweeted: Tweet = 
+    filter(p => p.retweets > elem.retweets) match {
+      case ne: NonEmpty => ne.mostRetweeted
+      case e: Empty => elem
+    }
+    
+
+  def descendingByRetweet: TweetList = 
+    val tweet = mostRetweeted
+    new Cons(tweet, remove(tweet).descendingByRetweet)
 
 
   /**
@@ -156,6 +184,7 @@ class NonEmpty(elem: Tweet, left: TweetSet, right: TweetSet) extends TweetSet:
     left.foreach(f)
     right.foreach(f)
 
+
 trait TweetList:
   def head: Tweet
   def tail: TweetList
@@ -178,14 +207,16 @@ object GoogleVsApple:
   val google = List("android", "Android", "galaxy", "Galaxy", "nexus", "Nexus")
   val apple = List("ios", "iOS", "iphone", "iPhone", "ipad", "iPad")
 
-  lazy val googleTweets: TweetSet = ???
-  lazy val appleTweets: TweetSet = ???
+  lazy val googleTweets: TweetSet = 
+    TweetReader.allTweets.filter(t => google.exists(s => t.text.contains(s)))
+  lazy val appleTweets: TweetSet = 
+    TweetReader.allTweets.filter(t => apple.exists(s => t.text.contains(s)))
 
   /**
    * A list of all tweets mentioning a keyword from either apple or google,
    * sorted by the number of retweets.
    */
-  lazy val trending: TweetList = ???
+  lazy val trending: TweetList = googleTweets.union(appleTweets).descendingByRetweet
 
 object Main extends App:
   // Print the trending tweets
